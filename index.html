@@ -124,9 +124,11 @@
         <div class="toolbar">
           <h2 class="section" style="border:none;margin:0">Priced products</h2>
           <div class="row">
+            <label class="toggle">Colour&nbsp;<select id="colourFilter" style="font-size:13px;padding:7px 10px"><option value="">All colours</option></select></label>
             <label class="toggle"><input type="checkbox" id="onlyRev"> review only</label>
             <button class="ghost" id="exportMin">Export simple</button>
             <button class="ghost" id="export">Export full</button>
+            <button class="ghost" id="exportAll">Export all ranges</button>
           </div>
         </div>
         <div class="tableScroll">
@@ -336,6 +338,28 @@ function compute(){const rangeName=document.getElementById('family').value;
   state.comp=FumagalliEngine.buildComponents(lists,state.lists.STOCK,fam.components,state.overrides);
   renderComponents(fam);renderTable(fam,lists);document.getElementById('results').classList.remove('hidden');}
 
+/* ---------- colour filter ---------- */
+function populateColourFilter(finishes){const sel=document.getElementById('colourFilter');if(!sel)return;const cur=sel.value;
+  const set=new Set();finishes.forEach(f=>{if(f&&String(f).trim())set.add(String(f).trim());});
+  const list=[...set].sort((a,b)=>a.localeCompare(b));
+  sel.innerHTML='<option value="">All colours</option>'+list.map(f=>`<option value="${f}">${f}</option>`).join('');
+  sel.value=set.has(cur)?cur:'';}
+function colourValue(){const sel=document.getElementById('colourFilter');return sel?sel.value:'';}
+function applyColourFilter(rows){const cv=colourValue();return cv?rows.filter(r=>String(r.finish||'').trim()===cv):rows;}
+
+/* ---------- price one range without touching the DOM (used by "Export all ranges") ---------- */
+function computeRangeRows(rangeName){const rows=state.master&&state.master[rangeName];if(!rows||!rows.length)return [];
+  const tok=rangeToken(rows);const out=[];
+  if(CURATED_HEADS.has(tok)){const fam=makeLanternHeadFamily(tok);const lists={ECI:state.lists.ECI,MAG:state.lists.MAG};
+    const comp=FumagalliEngine.buildComponents(lists,state.lists.STOCK,fam.components,{});
+    fam.configs.forEach(([code,cfg,finish,lant,bom,dp,sbom])=>{
+      const r=FumagalliEngine.priceSku(comp,bom,lists,dp);const s=FumagalliEngine.priceStock(comp,sbom);
+      const diff=Math.round((r.final-s.price)*100)/100;
+      out.push({range:rangeName,code,cfg,finish,lant,price:r.final,stock:s.price,diff,status:r.status,method:r.basis,working:r.cand,stockWork:s.detail});});
+  } else {const fam=buildMasterDirect(tok,rows);
+    fam.rows.forEach(r=>out.push({range:rangeName,code:r.code,cfg:r.cfg,finish:r.finish,lant:r.lant,price:r.price,stock:r.stock,diff:r.diff,status:r.status,method:r.method,working:r.working,stockWork:r.stockWork}));}
+  return out;}
+
 /* ---------- direct-match families (bollards, spikes, standalone wall lights) ---------- */
 const DSTOP=new Set('MM CCT LED E27 GU10 GX53 G9 R7S W OPAL CLEAR LIGHT POST LANTERN RESIN ES CW AND THE FOR WITH WALL APPLIQUE PEDESTAL SURFACE PENDANT HANGING SPIKE BOLLARD BRACKET CHAIN PLAIN RECESSED INGROUND SUSPENSION DECKLIGHT DOWNLIGHT UPLIGHT FLOODLIGHT BULKHEAD SENSOR VISOR EYELID GRILLE FACE LOUVRE TWIN DOUBLE SINGLE HEAD ONLY SOLAR REVERSIBLE'.split(' '));
 // Stock codes name things by mount (ESTERWALL, GELMIEYE) — keep those words for stock matching only.
@@ -369,8 +393,10 @@ function buildDirectFamily(rangeTok,rows){const ECI=state.lists.ECI,MAG=state.li
 function renderDirect(fam){
   document.getElementById('components').innerHTML='<p class="muted">Direct-match range — standalone products (bollards, spikes, wall lights). Each finished item is matched across ECI, Magnalux and Stock; the higher supplier price is kept. No component build-up.</p>';
   const tb=document.getElementById('tbody');tb.innerHTML='';const onlyRev=document.getElementById('onlyRev').checked;
+  populateColourFilter(fam.rows.map(r=>r.finish));const cv=colourValue();
   let total=0,auto=0,rev=0;lastRows=fam.rows.slice();
   fam.rows.forEach(r=>{total++;if(r.status==='review')rev++;else auto++;if(onlyRev&&r.status!=='review')return;
+    if(cv&&String(r.finish||'').trim()!==cv)return;
     const tr=document.createElement('tr');if(r.status==='review')tr.className='review';const dcls=r.diff<0?'neg':'pos';const dsign=r.diff>0?'+':'';
     tr.innerHTML=`<td class="code">${r.code}</td><td>${r.cfg}</td><td>${r.finish}</td><td>${r.lant}</td>`+
       `<td class="price">${r.price.toFixed(2)}</td><td class="num">${r.stock.toFixed(2)}</td><td class="num diff ${dcls}">${dsign}${r.diff.toFixed(2)}</td>`+
@@ -391,6 +417,7 @@ function renderComponents(fam){const box=document.getElementById('components');b
 
 let lastRows=[];
 function renderTable(fam,lists){const tb=document.getElementById('tbody');tb.innerHTML='';const onlyRev=document.getElementById('onlyRev').checked;
+  populateColourFilter(fam.configs.map(c=>c[2]));const cv=colourValue();
   let total=0,auto=0,rev=0;lastRows=[];
   fam.configs.forEach(([code,cfg,finish,lant,bom,dp,sbom])=>{
     const r=FumagalliEngine.priceSku(state.comp,bom,lists,dp);
@@ -400,6 +427,7 @@ function renderTable(fam,lists){const tb=document.getElementById('tbody');tb.inn
     total++;if(r.status==='review')rev++;else auto++;
     lastRows.push({code,cfg,finish,lant,price:r.final,stock:s.price,diff,status:r.status,method:r.basis,working:r.cand,stockWork:s.detail});
     if(onlyRev&&r.status!=='review')return;
+    if(cv&&String(finish||'').trim()!==cv)return;
     const tr=document.createElement('tr');if(r.status==='review')tr.className='review';
     const dcls=diff<0?'neg':'pos';const dsign=diff>0?'+':'';
     tr.innerHTML=`<td class="code">${code}</td><td>${cfg}</td><td>${finish}</td><td>${lant}</td>`+
@@ -408,6 +436,7 @@ function renderTable(fam,lists){const tb=document.getElementById('tbody');tb.inn
     tb.appendChild(tr);});
   document.getElementById('c-total').textContent=total;document.getElementById('c-auto').textContent=auto;document.getElementById('c-rev').textContent=rev;}
 document.getElementById('onlyRev').addEventListener('change',()=>{if(state.master)compute();});
+document.getElementById('colourFilter').addEventListener('change',()=>{if(state.master)compute();});
 
 /* ---------- add range from an uploaded structure file (beta, auto-drafted) ---------- */
 const QTY=/^(\d+L|\d\+\d|\d+)$/i;
@@ -463,8 +492,9 @@ if(_rangeFileEl)_rangeFileEl.addEventListener('change',async e=>{
   e.target.value='';
 });
 
-document.getElementById('export').addEventListener('click',()=>{if(!lastRows.length)return;
-  const data=lastRows.map(r=>({'Our Product code':r.code,'Configuration':r.cfg,'Finish':r.finish,'Lanterns':r.lant,'Supplier price (EUR)':r.price,'Stock-based price (EUR)':r.stock,'Diff (supplier - stock)':r.diff,'Status':r.status.toUpperCase(),'Method':r.method,'Supplier working':r.working,'Stock working':r.stockWork}));
+function colourSuffix(){const cv=colourValue();return cv?'_'+cv.replace(/[^A-Za-z0-9]+/g,'-'):'';}
+document.getElementById('export').addEventListener('click',()=>{const rows=applyColourFilter(lastRows);if(!rows.length)return;
+  const data=rows.map(r=>({'Our Product code':r.code,'Configuration':r.cfg,'Finish':r.finish,'Lanterns':r.lant,'Supplier price (EUR)':r.price,'Stock-based price (EUR)':r.stock,'Diff (supplier - stock)':r.diff,'Status':String(r.status).toUpperCase(),'Method':r.method,'Supplier working':r.working,'Stock working':r.stockWork}));
   const ws=XLSX.utils.json_to_sheet(data);ws['!cols']=[{wch:24},{wch:22},{wch:7},{wch:6},{wch:14},{wch:16},{wch:14},{wch:9},{wch:14},{wch:70},{wch:55}];
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Priced');
   if(state.comp&&Object.keys(state.comp).length){
@@ -472,13 +502,29 @@ document.getElementById('export').addEventListener('click',()=>{if(!lastRows.len
     const cws=XLSX.utils.json_to_sheet(cdata);cws['!cols']=[{wch:18},{wch:13},{wch:11},{wch:8},{wch:14},{wch:70}];
     XLSX.utils.book_append_sheet(wb,cws,'Component build-up');
   }
-  XLSX.writeFile(wb,'Fumagalli_'+document.getElementById('family').value+'_priced.xlsx');});
+  XLSX.writeFile(wb,'Fumagalli_'+document.getElementById('family').value+colourSuffix()+'_priced.xlsx');});
 
-document.getElementById('exportMin').addEventListener('click',()=>{if(!lastRows.length)return;
-  const data=lastRows.map(r=>({'Our Product code':r.code,'Configuration':r.cfg,'Finish':r.finish,'Lanterns':r.lant,'Supplier €':r.price,'Stock €':r.stock,'Diff':r.diff,'Status':r.status.toUpperCase(),'Method':r.method}));
+document.getElementById('exportMin').addEventListener('click',()=>{const rows=applyColourFilter(lastRows);if(!rows.length)return;
+  const data=rows.map(r=>({'Our Product code':r.code,'Configuration':r.cfg,'Finish':r.finish,'Lanterns':r.lant,'Supplier €':r.price,'Stock €':r.stock,'Diff':r.diff,'Status':String(r.status).toUpperCase(),'Method':r.method}));
   const ws=XLSX.utils.json_to_sheet(data);ws['!cols']=[{wch:26},{wch:24},{wch:8},{wch:7},{wch:11},{wch:11},{wch:9},{wch:9},{wch:13}];
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Prices');
-  XLSX.writeFile(wb,'Fumagalli_'+document.getElementById('family').value+'_simple.xlsx');});
+  XLSX.writeFile(wb,'Fumagalli_'+document.getElementById('family').value+colourSuffix()+'_simple.xlsx');});
+
+/* ---------- export every range in the master, in one workbook ---------- */
+document.getElementById('exportAll').addEventListener('click',()=>{
+  if(!state.master||!Object.keys(state.master).length){alert('Load the master catalogue + ECI, Magnalux and Stock first.');return;}
+  if(!(state.lists.ECI&&state.lists.MAG&&state.lists.STOCK)){alert('Load ECI, Magnalux and Stock first.');return;}
+  const btn=document.getElementById('exportAll');const label=btn.textContent;btn.textContent='Pricing all…';btn.disabled=true;
+  setTimeout(()=>{try{
+    let all=[];Object.keys(state.master).forEach(rn=>{all=all.concat(computeRangeRows(rn));});
+    all=applyColourFilter(all);
+    if(!all.length){alert('No products to export'+(colourValue()?' for colour "'+colourValue()+'"':'')+'.');return;}
+    const data=all.map(r=>({'Range':r.range,'Our Product code':r.code,'Configuration':r.cfg,'Finish':r.finish,'Lanterns':r.lant,'Supplier price (EUR)':r.price,'Stock-based price (EUR)':r.stock,'Diff (supplier - stock)':r.diff,'Status':String(r.status).toUpperCase(),'Method':r.method,'Supplier working':r.working,'Stock working':r.stockWork}));
+    const ws=XLSX.utils.json_to_sheet(data);ws['!cols']=[{wch:16},{wch:24},{wch:22},{wch:8},{wch:7},{wch:14},{wch:16},{wch:14},{wch:9},{wch:14},{wch:70},{wch:55}];
+    const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'All ranges');
+    XLSX.writeFile(wb,'Fumagalli_ALL-ranges'+colourSuffix()+'_priced.xlsx');
+  }catch(err){alert('Could not export all ranges: '+err.message);}
+  finally{btn.textContent=label;btn.disabled=false;}},30);});
 </script>
 </body>
 </html>

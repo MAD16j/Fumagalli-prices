@@ -21,6 +21,11 @@ https://<your-username>.github.io/<repo-name>/
 5. Review flagged items, override component picks if needed, and **Export** the
    results.
 
+Use the **Colour** dropdown above the table to filter the view (and exports) to a
+single finish, and **Export all ranges** to price every range in the master and
+download them in one workbook (with a `Range` column). The colour filter applies
+to all three export buttons.
+
 Validated head families (ANNA, RUT, SALEM, GOLIA, CEFA) are priced by component
 build-up; every other range is matched directly against the supplier and stock
 lists by description (with product code as a backup).
