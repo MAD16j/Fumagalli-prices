@@ -90,7 +90,7 @@
 
   <div class="panel">
     <p class="step"><b>1</b> Load lists</p>
-    <label class="drop" style="display:block;padding:14px;margin-bottom:14px;border-color:var(--blue)"><div class="lbl" style="color:var(--blue)">★ Master catalogue (all ranges) — load this first</div><div class="file opt" id="masterName">the combined master .xlsx (sheet “All Ranges (Combined)”)</div><input type="file" accept=".xlsx" class="hidden" data-src="master"></label>
+    <label class="drop" style="display:block;padding:14px;margin-bottom:14px;border-color:var(--blue)"><div class="lbl" style="color:var(--blue)">★ Master catalogue (all ranges) — load this first</div><div class="file opt" id="masterName">the master .xlsx (one sheet per range, or a combined sheet)</div><input type="file" accept=".xlsx" class="hidden" data-src="master"></label>
     <div class="loaders">
       <label class="drop"><div class="lbl">ECI list</div><div class="file opt">click to choose .xlsx</div><input type="file" accept=".xlsx" class="hidden" data-src="eci"></label>
       <label class="drop"><div class="lbl">Magnalux list</div><div class="file opt">click to choose .xlsx</div><input type="file" accept=".xlsx" class="hidden" data-src="mag"></label>
@@ -270,23 +270,43 @@ document.querySelectorAll('input[type=file]').forEach(inp=>{inp.addEventListener
     else{state.lists[src==='eci'?'ECI':src==='mag'?'MAG':'STOCK']=rows;drop.classList.add('has');fe.textContent=f.name+' · '+rows.length+' rows';fe.classList.remove('opt');}
   }catch(err){alert('Could not read '+f.name+': '+err.message);}refreshReady();});});
 
-// Parse the combined master: returns {rangeName: [{cfg,finish,lant,code,ourcode,desc}]}
-function parseMaster(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>{try{
-  const wb=XLSX.read(e.target.result,{type:'array'});
-  const ws=wb.Sheets['All Ranges (Combined)']||wb.Sheets[wb.SheetNames[0]];
-  const a=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
-  let hr=-1;for(let i=0;i<Math.min(a.length,12);i++){const row=(a[i]||[]).map(c=>String(c).toLowerCase());
-    if(row.some(c=>c.includes('configuration'))&&row.some(c=>c.includes('range'))){hr=i;break;}}
-  if(hr<0)return rej(new Error('No "Range"+"Configuration" header found.'));
-  const hdr=a[hr].map(c=>String(c||'').toLowerCase());
-  const ix=n=>hdr.findIndex(h=>n.some(x=>h.includes(x)));
-  const ri=ix(['range']),ci=ix(['configuration']),fi=ix(['finish']),li=ix(['lantern','lights']),oi=ix(['order code']),pi=ix(['our product code','product code']),di=ix(['short description','description']);
-  const out={};
+// Parse the master catalogue. Supports two layouts:
+//   (V3) one sheet per range — the tab name IS the range name (no Range column);
+//   (legacy) a single "All Ranges (Combined)" sheet with a Range column.
+// Returns {rangeName: [{cfg,finish,lant,code,ourcode,desc}]}
+function lantFromCfg(cfg){const u=String(cfg||'').toUpperCase();
+  let m=u.match(/(\d+)\s*\+\s*(\d+)/);if(m)return (+m[1])+(+m[2]);
+  m=u.match(/\b(\d+)\s*L\b/);if(m)return +m[1];
+  return 1;}
+function _ix(hdr){return n=>hdr.findIndex(h=>n.some(x=>h.includes(x)));}
+function parseRangeRows(a,hr,withRange){const hdr=a[hr].map(c=>String(c||'').toLowerCase());const ix=_ix(hdr);
+  const ri=withRange?ix(['range']):-1,ci=ix(['configuration']),fi=ix(['finish']),li=ix(['lantern','lights']),
+    oi=ix(['order code']),pi=ix(['our product code','product code']),di=ix(['short description','description']);
+  if(ci<0)return withRange?{}:[];
+  const out=withRange?{}:[];
   for(let i=hr+1;i<a.length;i++){const row=a[i];if(!row||row[ci]==null||String(row[ci]).trim()==='')continue;
-    const range=String(row[ri]||'Misc').trim();
-    (out[range]=out[range]||[]).push({cfg:String(row[ci]).trim(),finish:fi>=0?String(row[fi]||'').trim():'',
-      lant:li>=0?(parseInt(row[li])||1):1,code:oi>=0?String(row[oi]||'').trim():'',ourcode:pi>=0?String(row[pi]||'').trim():'',
-      desc:di>=0?String(row[di]||'').trim():''});}
+    const cfg=String(row[ci]).trim();
+    const rec={cfg,finish:fi>=0?String(row[fi]||'').trim():'',
+      lant:(li>=0&&row[li]!=null&&!isNaN(parseInt(row[li])))?parseInt(row[li]):lantFromCfg(cfg),
+      code:oi>=0?String(row[oi]||'').trim():'',ourcode:pi>=0?String(row[pi]||'').trim():'',
+      desc:di>=0?String(row[di]||'').trim():''};
+    if(withRange){const range=String(row[ri]||'Misc').trim();(out[range]=out[range]||[]).push(rec);}
+    else out.push(rec);}
+  return out;}
+function parseMaster(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>{try{
+  const wb=XLSX.read(e.target.result,{type:'array'});const out={};
+  const findCfg=(a,needRange)=>{for(let i=0;i<Math.min(a.length,14);i++){const row=(a[i]||[]).map(c=>String(c).toLowerCase());
+    if(row.some(c=>c.includes('configuration'))&&(!needRange||row.some(c=>c.includes('range'))))return i;}return -1;};
+  // (legacy) combined sheet with a Range column
+  const combined=wb.Sheets['All Ranges (Combined)'];
+  if(combined){const a=XLSX.utils.sheet_to_json(combined,{header:1,defval:null});const hr=findCfg(a,true);
+    if(hr>=0){const grouped=parseRangeRows(a,hr,true);for(const k in grouped)out[k]=grouped[k];}}
+  // (V3) one sheet per range — tab name is the range name
+  if(!Object.keys(out).length){for(const name of wb.SheetNames){
+    if(/\b(key|notes|index|contents|readme|legend)\b/i.test(name))continue;
+    const a=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:null});const hr=findCfg(a,false);if(hr<0)continue;
+    const rows=parseRangeRows(a,hr,false);if(rows.length)out[name.trim()]=rows;}}
+  if(!Object.keys(out).length)return rej(new Error('No range sheets with a "Configuration" column found.'));
   res(out);}catch(err){rej(err);}};r.onerror=rej;r.readAsArrayBuffer(file);});}
 
 // most-frequent config token = the range/head token

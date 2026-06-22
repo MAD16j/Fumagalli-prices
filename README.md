@@ -15,7 +15,10 @@ https://<your-username>.github.io/<repo-name>/
 ## How to use
 
 1. Open the page in a browser.
-2. Load the **master catalogue** `.xlsx` first (sheet "All Ranges (Combined)").
+2. Load the **master catalogue** `.xlsx` first. Either layout works: one sheet
+   per range (the tab name is the range name) or a single combined sheet with a
+   `Range` column. Each range sheet needs a `Configuration` column; a
+   `Key`/`notes` tab is ignored.
 3. Load the **ECI**, **Magnalux**, and **Stock** lists (`.xlsx`).
 4. Pick a range and click **Calculate prices**.
 5. Review flagged items, override component picks if needed, and **Export** the
