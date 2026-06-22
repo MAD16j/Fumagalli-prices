@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fumagalli Pricer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Mulish:ital,wght@0,300..800;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --ink:#33302b; --ink-2:#6f6962; --line:#ece7df; --line-soft:#f2eee8; --paper:#f7f3ec; --card:#fffdf9;
+    --glow:#d49a5e; --glow-bg:#f8efe2; --glow-ink:#9a6a32; --ok:#6b937e; --ok-bg:#ebf2ed; --ok-ink:#4d7561; --blue:#5f7e8c;
+    --neg:#c07a6e; --pos:#6b937e;
+    --shadow:0 1px 2px rgba(60,50,40,.04), 0 6px 20px rgba(60,50,40,.06);
+    --mono:"DM Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+    --sans:"Mulish","Segoe UI",system-ui,-apple-system,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:17px;line-height:1.65;-webkit-font-smoothing:antialiased;letter-spacing:-.011em}
+  header{background:linear-gradient(180deg,#fffdf9,#fbf6ee);color:var(--ink);padding:38px 40px 34px;display:flex;align-items:center;gap:16px;border-bottom:1px solid var(--line);position:relative}
+  header::before{content:"";position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,var(--ok),var(--glow))}
+  header .dot{width:13px;height:13px;border-radius:50%;background:linear-gradient(135deg,var(--ok),var(--glow));flex:none}
+  header h1{font-size:38px;margin:0;letter-spacing:-.04em;font-weight:800;line-height:1}
+  header .sub{font-size:15px;color:var(--ink-2);letter-spacing:0;font-weight:500;margin-left:auto}
+  .wrap{max-width:1300px;margin:0 auto;padding:44px 28px}
+  .step{font-size:17px;letter-spacing:-.02em;color:var(--ink);margin:0 0 20px;display:flex;align-items:center;gap:12px;font-weight:800}
+  .step b{background:var(--ok);color:#fff;width:28px;height:28px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;font-size:15px;font-weight:800}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:26px;padding:32px;margin-bottom:26px;box-shadow:var(--shadow)}
+  .loaders{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .drop{border:1.5px dashed #e0d8cc;border-radius:20px;padding:24px;text-align:center;transition:.18s ease;cursor:pointer;background:#fdfbf7}
+  .drop:hover{border-color:var(--glow);background:var(--glow-bg);transform:translateY(-1px)}
+  .drop.has{border-style:solid;border-color:#bcd6c6;background:var(--ok-bg)}
+  .drop .lbl{font-size:14px;letter-spacing:-.005em;color:var(--ink-2);font-weight:700}
+  .drop .file{font-size:14px;margin-top:8px;color:var(--ink);word-break:break-all}
+  .drop .opt{font-size:13.5px;color:#aaa39a;font-weight:400}
+  .row{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  select,button{font-family:var(--sans);font-size:15px}
+  select{padding:12px 15px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);font-weight:500}
+  select:focus{outline:none;border-color:var(--glow)}
+  button.primary{background:linear-gradient(135deg,var(--ok),#5d8270);color:#fff;border:none;padding:15px 30px;border-radius:14px;cursor:pointer;font-weight:700;font-size:16px;letter-spacing:-.01em;transition:.15s;box-shadow:0 4px 14px rgba(107,147,126,.32)}
+  button.primary:hover{filter:brightness(1.05);transform:translateY(-1px)}
+  button.primary:disabled{background:#d6d0c6;cursor:not-allowed;box-shadow:none;transform:none;filter:none}
+  button.ghost{background:#fff;border:1px solid var(--line);padding:12px 20px;border-radius:13px;cursor:pointer;color:var(--ink-2);font-weight:600;font-size:15px}
+  button.ghost:hover{border-color:var(--glow);color:var(--ink)}
+  .chips{display:flex;gap:14px;margin:0 0 20px;flex-wrap:wrap}
+  .chip{font-size:16px;padding:11px 20px;border-radius:30px;border:1px solid var(--line);background:#fff;color:var(--ink-2);font-weight:600}
+  .chip b{font-size:20px;color:var(--ink);margin-left:6px;font-weight:800}
+  .chip.rev{background:var(--glow-bg);border-color:#ecd9c2;color:var(--glow-ink)}
+  .chip.rev b{color:var(--glow-ink)}
+  .chip.ok{background:var(--ok-bg);border-color:#cde0d4;color:var(--ok-ink)}
+  .chip.ok b{color:var(--ok-ink)}
+  .grid2{display:grid;grid-template-columns:360px 1fr;gap:26px;align-items:start}
+  @media(max-width:980px){.grid2{grid-template-columns:1fr}.loaders{grid-template-columns:1fr}}
+  h2.section{font-size:20px;letter-spacing:-.02em;color:var(--ink);font-weight:800;border-bottom:1px solid var(--line-soft);padding-bottom:13px;margin:0 0 18px}
+  table{width:100%;border-collapse:collapse;font-size:15.5px}
+  th{text-align:left;font-size:13.5px;letter-spacing:-.005em;color:var(--ink-2);font-weight:700;padding:14px 11px;border-bottom:1px solid var(--line);position:sticky;top:0;background:#fffdf9}
+  td{padding:13px 11px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td.code{font-family:var(--mono);font-size:13.5px;color:var(--blue)}
+  td.price{font-family:var(--mono);font-weight:500;font-size:15px;text-align:right;white-space:nowrap;color:var(--ink)}
+  td.num{font-family:var(--mono);font-size:14px;text-align:right;white-space:nowrap;color:var(--ink-2)}
+  td.diff.pos{color:var(--pos)} td.diff.neg{color:var(--neg)}
+  tr.review{background:#fdf6ec}
+  tr.review td.flag{color:var(--glow-ink);font-weight:700}
+  td.flag{font-size:13px;letter-spacing:-.005em;color:var(--ok-ink);font-weight:600}
+  .arith{font-size:13px;color:#948d83;font-family:var(--mono);line-height:1.55;max-width:330px}
+  .comp{border:1px solid var(--line);border-radius:15px;padding:14px 16px;margin-bottom:11px;background:#fdfbf7;transition:.15s}
+  .comp.rev{border-color:#ecd9c2;background:var(--glow-bg)}
+  .comp .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .comp .nm{font-family:var(--mono);font-size:14px;color:var(--ink)}
+  .comp .pr{font-family:var(--mono);font-size:15px;font-weight:500}
+  .comp .stk{font-family:var(--mono);font-size:13px;color:#948d83}
+  .comp select{width:100%;margin-top:11px;font-size:14px}
+  .muted{color:#a39c92;font-size:14.5px;line-height:1.6}
+  .hidden{display:none}
+  .tableScroll{max-height:560px;overflow:auto;border:1px solid var(--line);border-radius:14px;background:var(--card)}
+  .toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:10px;flex-wrap:wrap}
+  label.toggle{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;cursor:pointer;color:var(--ink-2)}
+</style>
+</head>
+<body>
+<header>
+  <span class="dot"></span>
+  <h1>Fumagalli Pricer</h1>
+  <span class="sub">component build-up · supplier vs stock · automated with review</span>
+</header>
+<div class="wrap">
+
+  <div class="panel">
+    <p class="step"><b>1</b> Load lists</p>
+    <label class="drop" style="display:block;padding:14px;margin-bottom:14px;border-color:var(--blue)"><div class="lbl" style="color:var(--blue)">★ Master catalogue (all ranges) — load this first</div><div class="file opt" id="masterName">the master .xlsx (one sheet per range, or a combined sheet)</div><input type="file" accept=".xlsx" class="hidden" data-src="master"></label>
+    <div class="loaders">
+      <label class="drop"><div class="lbl">ECI list</div><div class="file opt">click to choose .xlsx</div><input type="file" accept=".xlsx" class="hidden" data-src="eci"></label>
+      <label class="drop"><div class="lbl">Magnalux list</div><div class="file opt">click to choose .xlsx</div><input type="file" accept=".xlsx" class="hidden" data-src="mag"></label>
+      <label class="drop"><div class="lbl">Stock list</div><div class="file opt">click to choose .xlsx</div><input type="file" accept=".xlsx" class="hidden" data-src="stock"></label>
+    </div>
+  </div>
+
+  <div class="panel">
+    <p class="step"><b>2</b> Choose range &amp; calculate</p>
+    <div class="row">
+      <select id="family"></select>
+      <button class="primary" id="run" disabled>Calculate prices</button>
+      <span class="muted" id="hint">Load the master + ECI, Magnalux and Stock to begin.</span>
+    </div>
+    <p class="muted" style="margin-top:10px">Ranges come from the master. Validated head families (ANNA, RUT, SALEM, GOLIA, CEFA) price by component build-up; every other range is matched directly against ECI/Magnalux/Stock by description (code as backup). Anything the suppliers don’t carry is flagged <b>review</b>, never blank.</p>
+  </div>
+
+  <div id="results" class="hidden">
+    <div class="chips">
+      <span class="chip">Products <b id="c-total">0</b></span>
+      <span class="chip ok">Auto <b id="c-auto">0</b></span>
+      <span class="chip rev">Review <b id="c-rev">0</b></span>
+    </div>
+    <div class="grid2">
+      <div class="panel">
+        <h2 class="section">Component build-up</h2>
+        <p class="muted" style="margin-top:-4px">Supplier price (bold) and stock cost (grey) per part. Amber = confirm the pick; override re-prices everything.</p>
+        <div id="components"></div>
+      </div>
+      <div class="panel">
+        <div class="toolbar">
+          <h2 class="section" style="border:none;margin:0">Priced products</h2>
+          <div class="row">
+            <label class="toggle">Colour&nbsp;<select id="colourFilter" style="font-size:13px;padding:7px 10px"><option value="">All colours</option></select></label>
+            <label class="toggle"><input type="checkbox" id="onlyRev"> review only</label>
+            <button class="ghost" id="exportMin">Export simple</button>
+            <button class="ghost" id="export">Export full</button>
+            <button class="ghost" id="exportAll">Export all ranges</button>
+          </div>
+        </div>
+        <div class="tableScroll">
+          <table>
+            <thead><tr><th>Code</th><th>Configuration</th><th>Fin.</th><th>L.</th><th style="text-align:right">Supplier €</th><th style="text-align:right">Stock €</th><th style="text-align:right">Diff</th><th>Status</th><th>Method</th><th>Working</th></tr></thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------- engine ---------- */
+(function(root){
+  const LAMP=/\bC\/W\b|\bLED\b|\d+(\.\d+)?\s*W\b|\b\d+K\b|2700K|A60/i;
+  function rowsMatch(lists,src,pattern){const re=new RegExp(pattern,'i');return (lists[src]||[]).filter(r=>re.test(r.d.toUpperCase())&&r.p!=null&&!isNaN(r.p));}
+  function resolveStock(stockList,code){if(!code||!stockList)return null;const c=String(code).toUpperCase();
+    let hit=stockList.find(r=>String(r.c||'').toUpperCase()===c);
+    if(!hit)hit=stockList.find(r=>String(r.c||'').toUpperCase().includes(c));
+    if(!hit)hit=stockList.find(r=>String(r.d||'').toUpperCase().includes(c));
+    return hit?hit.p:null;}
+  function resolveComponent(lists,spec){const cands=[],notes=[];for(const [src,pattern,rule] of (spec.lookup||[])){for(const r of rowsMatch(lists,src,pattern)){const lamp=LAMP.test(r.d);if(rule==='exclude_lamp'&&lamp){notes.push(`${src} "${r.d}" ${r.p.toFixed(2)} EXCL(lamp)`);continue;}if(r.p<=0)continue;cands.push({price:r.p,src,desc:r.d});notes.push(`${src} "${r.d}" ${r.p.toFixed(2)}`);}}
+    if(!cands.length)return{price:spec.floor??null,basis:'UNRESOLVED',candidates:[],note:notes.join('; '),flag:'review'};
+    let chosen;
+    if(spec.pick==='bare'){const bare=cands.filter(c=>/BASE|BRACKET|POST|POLE|CHAIN|ONLY|SPACER/i.test(c.desc));
+      const pool=bare.length?bare:cands;pool.sort((a,b)=>a.price-b.price);chosen=pool[0];cands.sort((a,b)=>b.price-a.price);}
+    else{cands.sort((a,b)=>b.price-a.price);chosen=cands[0];}
+    let flag=spec.forceReview?'review':'auto';
+    const spread=cands[0].price-cands[cands.length-1].price;if(cands.length>1&&spread/chosen.price>0.5)flag='review';
+    return{price:chosen.price,basis:`${chosen.src} ${spec.pick==='bare'?'part':'direct'}`,candidates:cands,note:notes.join('; '),flag,chosenDesc:chosen.desc};}
+  function buildComponents(lists,stockList,specs,overrides){const out={};for(const name in specs){const r=resolveComponent(lists,specs[name]);r.stock=resolveStock(stockList,specs[name].stock);if(overrides&&overrides[name]!=null){r.price=overrides[name];r.basis='Confirmed';r.flag='auto';}out[name]=r;}return out;}
+  function directCandidates(lists,patterns){const res=[];for(const [src,pat] of (patterns||[])){for(const r of rowsMatch(lists,src,pat)){if(LAMP.test(r.d))res.push({price:null,src,desc:r.d,raw:r.p});else res.push({price:r.p,src,desc:r.d,raw:r.p});}}return res;}
+  function priceSku(comp,bom,lists,directPats){let partsTotal=0;const missing=[],lines=[];let review=false;
+    for(const [cname,qty] of bom){const c=comp[cname];if(!c||c.price==null){missing.push(cname);lines.push(`${cname}×${qty}=?`);review=true;continue;}const sub=c.price*qty;partsTotal+=sub;lines.push(`${cname} ${c.price.toFixed(2)}×${qty}=${sub.toFixed(2)}`);if(c.flag==='review')review=true;}
+    const composed=missing.length?null:Math.round(partsTotal*100)/100;
+    const dcands=directCandidates(lists,directPats);const validDirects=dcands.filter(d=>d.price!=null).map(d=>d.price);const excluded=dcands.filter(d=>d.price==null);
+    const pool=(composed!=null?[composed]:[]).concat(validDirects);let final,basis;
+    if(pool.length){final=Math.max(...pool);basis=(composed!=null&&final===composed)?'Composed':'Direct';}else{final=Math.round(partsTotal*100)/100;basis='Floor estimate';review=true;}
+    const status=(missing.length||review)?'review':'auto';
+    const cand=`Composed: ${lines.join(' + ')} = ${partsTotal.toFixed(2)}.`+(validDirects.length?` Directs: ${dcands.filter(d=>d.price!=null).map(d=>`${d.src} ${d.raw.toFixed(2)}`).join(', ')}.`:'')+(excluded.length?` Excluded(lamp): ${excluded.map(d=>`${d.src} ${d.raw.toFixed(2)}`).join(', ')}.`:'')+(missing.length?` MISSING: ${missing.join(', ')}.`:'');
+    return{final,basis,status,cand};}
+  function priceStock(comp,stockBOM){let total=0;const missing=[],lines=[];
+    for(const [cname,qty] of stockBOM){const c=comp[cname];if(!c||c.stock==null){missing.push(cname);lines.push(`${cname}×${qty}=?`);continue;}const sub=c.stock*qty;total+=sub;lines.push(`${cname} ${c.stock.toFixed(2)}×${qty}=${sub.toFixed(2)}`);}
+    const price=Math.round(total*100)/100;
+    return{price,missing,detail:`Stock: ${lines.join(' + ')} = ${total.toFixed(2)}.`+(missing.length?` MISSING: ${missing.join(', ')}.`:'')};}
+  root.FumagalliEngine={buildComponents,priceSku,priceStock,resolveComponent};
+})(window);
+
+/* ---------- lantern-head archetype: one recipe, head swapped per family ---------- */
+function lanternHeadComponents(H){return {
+  head:{lookup:[['ECI','^'+H+' LANTERN','direct']],stock:H},
+  mikrolot_base:{lookup:[['MAG','^MIKROLOT BASE ONLY','direct']],stock:'MICROLOT'},
+  bisso_bracket:{lookup:[['MAG','^BISSO WALL BRACKET','direct']],stock:'BISSO'},
+  sichem_chain:{lookup:[['ECI','SICHEM CHAIN FOR SM/MED','direct']],stock:'SICHEM'},
+  mizar_post:{lookup:[['ECI','^POST MIZAR','direct']],stock:'MIZAR'},
+  aloe_post:{lookup:[['ECI','^POST ALOE','direct']],stock:'ALOE'},
+  artu_post:{lookup:[['ECI','^POST ARTU','direct']],stock:'ARTU'},
+  gigi_post:{lookup:[['MAG','GIGI.*SINGLE POST','direct'],['ECI','^POST GIGI 1750MM BLACK','direct']],stock:'GIGI'},
+  s20_spacer:{lookup:[['ECI','^2 WAY SPACER C/W BISSO','direct']],stock:null},
+  s30_spacer:{lookup:[['ECI','^3 WAY SPACER C/W BISSO','direct']],stock:null},
+  porpora_bracket:{lookup:[],forceReview:true,stock:null}
+};}
+/* template: [cfg, lant, supplierBOM, directPats, stockBOM] with HEAD placeholder */
+const HEAD_TEMPLATE=[
+  ['HEAD',1,[['head',1]],[],[['head',1]]],
+  ['MIKROLOT/HEAD',1,[['mikrolot_base',1],['head',1]],[['MAG','^MIKROLOT/HEAD']],[['mikrolot_base',1],['head',1]]],
+  ['SICHEM/HEAD',1,[['sichem_chain',1],['head',1]],[['ECI','^SICHEM HEAD'],['MAG','^SICHEM/HEAD']],[['sichem_chain',1],['head',1]]],
+  ['BISSO/HEAD',1,[['bisso_bracket',1],['head',1]],[['ECI','^BISSO HEAD'],['MAG','^BISSO/HEAD']],[['bisso_bracket',1],['head',1]]],
+  ['PORPORA/HEAD',2,[['porpora_bracket',1],['head',2]],[],[['porpora_bracket',1],['head',2]]],
+  ['MIZAR/HEAD',1,[['mizar_post',1],['head',1]],[['ECI','^MIZAR HEAD'],['MAG','^MIZAR/HEAD']],[['mizar_post',1],['head',1]]],
+  ["ALOE'.R/HEAD",1,[['aloe_post',1],['head',1]],[],[['aloe_post',1],['head',1]]],
+  ["ARTU'/HEAD",1,[['artu_post',1],['head',1]],[['ECI','^ARTU HEAD']],[['artu_post',1],['head',1]]],
+  ["ARTU' BISSO/HEAD 2L",2,[['artu_post',1],['s20_spacer',1],['head',2]],[],[['artu_post',1],['bisso_bracket',2],['head',2]]],
+  ["ARTU' BISSO/HEAD 2+1",3,[['artu_post',1],['s20_spacer',1],['head',3]],[],[['artu_post',1],['bisso_bracket',2],['head',3]]],
+  ["ARTU' BISSO/HEAD 3L",3,[['artu_post',1],['s30_spacer',1],['head',3]],[],[['artu_post',1],['bisso_bracket',3],['head',3]]],
+  ["ARTU' BISSO/HEAD 3+1",4,[['artu_post',1],['s30_spacer',1],['head',4]],[],[['artu_post',1],['bisso_bracket',3],['head',4]]],
+  ['GIGI BISSO/HEAD 2L',2,[['gigi_post',1],['s20_spacer',1],['head',2]],[['ECI','^GIGI BISSO HEAD 2L'],['MAG','HEAD.*2 Light']],[['gigi_post',1],['bisso_bracket',2],['head',2]]],
+  ['GIGI BISSO/HEAD 2+1',3,[['gigi_post',1],['s20_spacer',1],['head',3]],[],[['gigi_post',1],['bisso_bracket',2],['head',3]]],
+  ['GIGI BISSO/HEAD 3L',3,[['gigi_post',1],['s30_spacer',1],['head',3]],[['ECI','^GIGI BISSO HEAD 3L'],['MAG','HEAD.*3 Light']],[['gigi_post',1],['bisso_bracket',3],['head',3]]],
+  ['GIGI BISSO/HEAD 3+1',4,[['gigi_post',1],['s30_spacer',1],['head',4]],[],[['gigi_post',1],['bisso_bracket',3],['head',4]]]
+];
+function swapHead(x,H){if(typeof x==='string')return x.replace(/HEAD/g,H);if(Array.isArray(x))return x.map(e=>swapHead(e,H));return x;}
+function makeLanternHeadFamily(H){const comps=lanternHeadComponents(H);const configs=[];
+  for(const [cfgT,lant,bomT,dpT,sbomT] of HEAD_TEMPLATE){const cfg=cfgT.replace(/HEAD/g,H);
+    for(const [fin,fc] of [['Black','BL'],['White','WH']]){
+      const code=(cfg.replace(/[^A-Z0-9]+/gi,'-').replace(/^-|-$/g,'')+'-'+fc).toUpperCase();
+      configs.push([code,cfg,fin,lant,bomT,swapHead(dpT,H),sbomT]);}}
+  return {components:comps,configs};}
+/* register the small-head families that share this exact structure */
+const HEAD_FAMILIES=[['ANNA','ANNA (small E27) · validated'],['SABA','SABA (small E27)'],['RUT','RUT (small E27)'],['CEFA','CEFA (small E27)'],['GOLIA','GOLIA (small E27)'],['SALEM','SALEM (small E27)']];
+const FAMILIES={};
+HEAD_FAMILIES.forEach(([H])=>{FAMILIES[H]=makeLanternHeadFamily(H);});
+
+/* ---------- app ---------- */
+const state={lists:{ECI:null,MAG:null,STOCK:null},master:null,overrides:{},comp:null};
+function populateFamilies(selectName){const sel=document.getElementById('family');sel.innerHTML='';
+  const ranges=state.master?Object.keys(state.master):[];
+  if(!ranges.length){const o=document.createElement('option');o.textContent='— load master catalogue first —';o.value='';sel.appendChild(o);return;}
+  ranges.forEach(k=>{const tok=rangeToken(state.master[k]);const o=document.createElement('option');o.value=k;
+    o.textContent=k+(CURATED_HEADS.has(tok)?'  ✓ validated':'');sel.appendChild(o);});
+  if(selectName)sel.value=selectName;}
+populateFamilies();
+function num(v){if(v==null)return NaN;if(typeof v==='number')return v;let s=String(v).replace(/[^0-9.,\-]/g,'');
+  if(s.indexOf(',')>=0&&s.indexOf('.')<0)s=s.replace(',','.');else s=s.replace(/,/g,'');return parseFloat(s);}
+function findHeaderRow(a,needles){for(let i=0;i<Math.min(a.length,20);i++){const row=(a[i]||[]).map(c=>String(c).toLowerCase());
+  if(needles.every(group=>group.some(n=>row.some(cell=>cell.includes(n)))))return i;}return -1;}
+function colIdx(hdr,cands){for(const c of cands){const i=hdr.findIndex(h=>h.includes(c));if(i>=0)return i;}return -1;}
+function readXlsx(file,src){return new Promise((res,rej)=>{const r=new FileReader();
+  r.onload=e=>{try{const wb=XLSX.read(e.target.result,{type:'array'});let out=[];
+    const ws=(src==='eci'&&wb.Sheets['MASTER'])?wb.Sheets['MASTER']:wb.Sheets[wb.SheetNames[0]];
+    const a=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+    if(src==='eci'){
+      let hr=findHeaderRow(a,[['description','desc'],['price','cost','rate']]);if(hr<0)hr=1;
+      const hdr=(a[hr]||[]).map(c=>String(c||'').toLowerCase());
+      let di=colIdx(hdr,['description','desc']),pi=colIdx(hdr,['price','cost','rate']);
+      if(di<0)di=2;if(pi<0)pi=4;
+      for(let i=hr+1;i<a.length;i++){const row=a[i];if(!row)continue;const d=row[di],p=num(row[pi]);if(d!=null&&String(d).trim()&&!isNaN(p))out.push({d:String(d).replace(/\s+/g,' ').trim(),p});}
+    } else {
+      let hr=findHeaderRow(a,[['description','product','desc','name','code'],['price','cost','list']]);if(hr<0)hr=0;
+      const hdr=(a[hr]||[]).map(c=>String(c||'').toLowerCase());
+      let di=colIdx(hdr,['description','product','desc','name']),pi=colIdx(hdr,['cost','list price','price','rate']),ci=colIdx(hdr,['product code','code','sku','ref']);
+      if(di<0)di=1;if(pi<0)pi=2;if(src==='stock'&&ci<0)ci=0;
+      for(let i=hr+1;i<a.length;i++){const row=a[i];if(!row)continue;const d=row[di],p=num(row[pi]);const c=ci>=0?row[ci]:null;
+        if(p!=null&&!isNaN(p)&&((d!=null&&String(d).trim())||(c!=null&&String(c).trim())))out.push({d:String(d||'').trim(),p,c:c!=null?String(c).trim():''});}
+    }
+    res(out);}catch(err){rej(err);}};r.onerror=rej;r.readAsArrayBuffer(file);});}
+
+document.querySelectorAll('input[type=file]').forEach(inp=>{inp.addEventListener('change',async e=>{
+  const f=e.target.files[0];if(!f)return;const src=inp.dataset.src;
+  if(src==='master'){try{const ranges=await parseMaster(f);state.master=ranges;
+    const fe=inp.closest('.drop').querySelector('.file');const n=Object.keys(ranges).length,tot=Object.values(ranges).reduce((s,r)=>s+r.length,0);
+    fe.textContent=f.name+' · '+n+' ranges · '+tot+' products';fe.classList.remove('opt');inp.closest('.drop').classList.add('has');
+    populateFamilies();}catch(err){alert('Could not read master: '+err.message);}refreshReady();return;}
+  try{const rows=await readXlsx(f,src);
+    const drop=inp.closest('.drop');const fe=drop.querySelector('.file');
+    if(!rows.length){drop.classList.remove('has');fe.textContent=f.name+' · ⚠ 0 priced rows read — wrong file or unexpected columns';fe.classList.remove('opt');state.lists[src==='eci'?'ECI':src==='mag'?'MAG':'STOCK']=null;}
+    else{state.lists[src==='eci'?'ECI':src==='mag'?'MAG':'STOCK']=rows;drop.classList.add('has');fe.textContent=f.name+' · '+rows.length+' rows';fe.classList.remove('opt');}
+  }catch(err){alert('Could not read '+f.name+': '+err.message);}refreshReady();});});
+
+// Parse the master catalogue. Supports two layouts:
+//   (V3) one sheet per range — the tab name IS the range name (no Range column);
+//   (legacy) a single "All Ranges (Combined)" sheet with a Range column.
+// Returns {rangeName: [{cfg,finish,lant,code,ourcode,desc}]}
+function lantFromCfg(cfg){const u=String(cfg||'').toUpperCase();
+  let m=u.match(/(\d+)\s*\+\s*(\d+)/);if(m)return (+m[1])+(+m[2]);
+  m=u.match(/\b(\d+)\s*L\b/);if(m)return +m[1];
+  return 1;}
+function _ix(hdr){return n=>hdr.findIndex(h=>n.some(x=>h.includes(x)));}
+function parseRangeRows(a,hr,withRange){const hdr=a[hr].map(c=>String(c||'').toLowerCase());const ix=_ix(hdr);
+  const ri=withRange?ix(['range']):-1,ci=ix(['configuration']),fi=ix(['finish']),li=ix(['lantern','lights']),
+    oi=ix(['order code']),pi=ix(['our product code','product code']),di=ix(['short description','description']);
+  if(ci<0)return withRange?{}:[];
+  const out=withRange?{}:[];
+  for(let i=hr+1;i<a.length;i++){const row=a[i];if(!row||row[ci]==null||String(row[ci]).trim()==='')continue;
+    const cfg=String(row[ci]).trim();
+    const rec={cfg,finish:fi>=0?String(row[fi]||'').trim():'',
+      lant:(li>=0&&row[li]!=null&&!isNaN(parseInt(row[li])))?parseInt(row[li]):lantFromCfg(cfg),
+      code:oi>=0?String(row[oi]||'').trim():'',ourcode:pi>=0?String(row[pi]||'').trim():'',
+      desc:di>=0?String(row[di]||'').trim():''};
+    if(withRange){const range=String(row[ri]||'Misc').trim();(out[range]=out[range]||[]).push(rec);}
+    else out.push(rec);}
+  return out;}
+function parseMaster(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>{try{
+  const wb=XLSX.read(e.target.result,{type:'array'});const out={};
+  const findCfg=(a,needRange)=>{for(let i=0;i<Math.min(a.length,14);i++){const row=(a[i]||[]).map(c=>String(c).toLowerCase());
+    if(row.some(c=>c.includes('configuration'))&&(!needRange||row.some(c=>c.includes('range'))))return i;}return -1;};
+  // (legacy) combined sheet with a Range column
+  const combined=wb.Sheets['All Ranges (Combined)'];
+  if(combined){const a=XLSX.utils.sheet_to_json(combined,{header:1,defval:null});const hr=findCfg(a,true);
+    if(hr>=0){const grouped=parseRangeRows(a,hr,true);for(const k in grouped)out[k]=grouped[k];}}
+  // (V3) one sheet per range — tab name is the range name
+  if(!Object.keys(out).length){for(const name of wb.SheetNames){
+    if(/\b(key|notes|index|contents|readme|legend)\b/i.test(name))continue;
+    const a=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:null});const hr=findCfg(a,false);if(hr<0)continue;
+    const rows=parseRangeRows(a,hr,false);if(rows.length)out[name.trim()]=rows;}}
+  if(!Object.keys(out).length)return rej(new Error('No range sheets with a "Configuration" column found.'));
+  res(out);}catch(err){rej(err);}};r.onerror=rej;r.readAsArrayBuffer(file);});}
+
+// most-frequent config token = the range/head token
+function rangeToken(rows){const f={};rows.forEach(r=>dToks(r.cfg).forEach(t=>f[t]=(f[t]||0)+1));
+  return Object.keys(f).sort((a,b)=>f[b]-f[a])[0]||'';}
+const CURATED_HEADS=new Set(['ANNA','RUT','SALEM','GOLIA','CEFA']);
+
+// Build a direct-match family from master rows (description priority, code backup)
+function buildMasterDirect(rangeTok,rows){const ECI=state.lists.ECI,MAG=state.lists.MAG,STOCK=state.lists.STOCK;const out=[];
+  for(const r of rows){const qc=dColour((r.cfg||'')+' '+(r.finish||'')+' '+(r.desc||''));
+    const reqToks=dToks(r.cfg);
+    const e=dMatch(ECI,reqToks,qc,false),m=dMatch(MAG,reqToks,qc,false);
+    let s=dMatch(STOCK,dToksStock(r.cfg),qc,true);
+    if(!s&&r.ourcode){const oc=r.ourcode.toUpperCase().replace(/[^A-Z0-9]/g,'');s=(STOCK||[]).map(x=>({x,c:String(x.c||'').toUpperCase().replace(/[^A-Z0-9]/g,'')})).filter(o=>o.c&&(o.c===oc||o.c.includes(oc)||oc.includes(o.c))).map(o=>({price:o.x.p,desc:o.x.c+' '+o.x.d}))[0]||null;}
+    const sups=[e,m].filter(Boolean);const supplier=sups.length?Math.max(...sups.map(x=>x.price)):null;
+    const stock=s?s.price:null;const price=supplier!=null?supplier:(stock!=null?stock:0);
+    out.push({code:r.ourcode||r.code||r.cfg,cfg:r.cfg,finish:r.finish,lant:r.lant,
+      price,stock:stock!=null?stock:0,diff:Math.round((price-(stock!=null?stock:0))*100)/100,
+      status:(supplier!=null)?'auto':'review',method:'Direct match',matched:supplier!=null,stockMatched:stock!=null,
+      working:`ECI ${e?e.price.toFixed(2):'—'} · MAG ${m?m.price.toFixed(2):'—'} → ${supplier!=null?supplier.toFixed(2):'NO MATCH'}.`,
+      stockWork:s?`Stock: ${s.desc.slice(0,44)} = ${s.price.toFixed(2)}.`:'No stock match.'});}
+  // colour-fill: within the same configuration, a colour with no match inherits a priced sibling colour
+  const groups={};out.forEach(r=>{(groups[r.cfg]=groups[r.cfg]||[]).push(r);});
+  for(const cfg in groups){const g=groups[cfg];
+    const supSrc=g.find(r=>r.matched);const stkSrc=g.find(r=>r.stockMatched);
+    for(const r of g){
+      if(!r.matched&&supSrc){r.price=supSrc.price;r.status='auto';r.method='Colour-fill';
+        r.working=`No direct match for ${r.finish||'this colour'} — inherited ${supSrc.finish||'sibling'} price ${supSrc.price.toFixed(2)}.`;}
+      if(!r.stockMatched&&stkSrc){r.stock=stkSrc.stock;r.stockWork=`Inherited ${stkSrc.finish||'sibling'} stock ${stkSrc.stock.toFixed(2)}.`;}
+      r.diff=Math.round((r.price-r.stock)*100)/100;
+    }
+  }
+  return {_direct:true,rows:out};}
+
+function refreshReady(){const ok=l=>Array.isArray(l)&&l.length>0;const ready=ok(state.lists.ECI)&&ok(state.lists.MAG)&&ok(state.lists.STOCK)&&state.master;
+  document.getElementById('run').disabled=!ready;
+  document.getElementById('hint').textContent=ready?'Ready — pick a range and click Calculate.':'Load the master + ECI, Magnalux and Stock (each >0 rows) to begin.';}
+
+document.getElementById('run').addEventListener('click',()=>{state.overrides={};compute();});
+document.getElementById('family').addEventListener('change',()=>{if(state.lists.ECI&&state.lists.MAG&&state.lists.STOCK&&state.master){state.overrides={};compute();}});
+function compute(){const rangeName=document.getElementById('family').value;
+  if(!rangeName||!state.master||!state.master[rangeName]){return;}
+  const rows=state.master[rangeName];const tok=rangeToken(rows);
+  let fam;
+  if(CURATED_HEADS.has(tok)){fam=makeLanternHeadFamily(tok);}
+  else{fam=buildMasterDirect(tok,rows);}
+  if(fam._direct){state.comp=null;renderDirect(fam);document.getElementById('results').classList.remove('hidden');return;}
+  const lists={ECI:state.lists.ECI,MAG:state.lists.MAG};
+  state.comp=FumagalliEngine.buildComponents(lists,state.lists.STOCK,fam.components,state.overrides);
+  renderComponents(fam);renderTable(fam,lists);document.getElementById('results').classList.remove('hidden');}
+
+/* ---------- colour filter ---------- */
+function populateColourFilter(finishes){const sel=document.getElementById('colourFilter');if(!sel)return;const cur=sel.value;
+  const set=new Set();finishes.forEach(f=>{if(f&&String(f).trim())set.add(String(f).trim());});
+  const list=[...set].sort((a,b)=>a.localeCompare(b));
+  sel.innerHTML='<option value="">All colours</option>'+list.map(f=>`<option value="${f}">${f}</option>`).join('');
+  sel.value=set.has(cur)?cur:'';}
+function colourValue(){const sel=document.getElementById('colourFilter');return sel?sel.value:'';}
+function applyColourFilter(rows){const cv=colourValue();return cv?rows.filter(r=>String(r.finish||'').trim()===cv):rows;}
+
+/* ---------- price one range without touching the DOM (used by "Export all ranges") ---------- */
+function computeRangeRows(rangeName){const rows=state.master&&state.master[rangeName];if(!rows||!rows.length)return [];
+  const tok=rangeToken(rows);const out=[];
+  if(CURATED_HEADS.has(tok)){const fam=makeLanternHeadFamily(tok);const lists={ECI:state.lists.ECI,MAG:state.lists.MAG};
+    const comp=FumagalliEngine.buildComponents(lists,state.lists.STOCK,fam.components,{});
+    fam.configs.forEach(([code,cfg,finish,lant,bom,dp,sbom])=>{
+      const r=FumagalliEngine.priceSku(comp,bom,lists,dp);const s=FumagalliEngine.priceStock(comp,sbom);
+      const diff=Math.round((r.final-s.price)*100)/100;
+      out.push({range:rangeName,code,cfg,finish,lant,price:r.final,stock:s.price,diff,status:r.status,method:r.basis,working:r.cand,stockWork:s.detail});});
+  } else {const fam=buildMasterDirect(tok,rows);
+    fam.rows.forEach(r=>out.push({range:rangeName,code:r.code,cfg:r.cfg,finish:r.finish,lant:r.lant,price:r.price,stock:r.stock,diff:r.diff,status:r.status,method:r.method,working:r.working,stockWork:r.stockWork}));}
+  return out;}
+
+/* ---------- direct-match families (bollards, spikes, standalone wall lights) ---------- */
+const DSTOP=new Set('MM CCT LED E27 GU10 GX53 G9 R7S W OPAL CLEAR LIGHT POST LANTERN RESIN ES CW AND THE FOR WITH WALL APPLIQUE PEDESTAL SURFACE PENDANT HANGING SPIKE BOLLARD BRACKET CHAIN PLAIN RECESSED INGROUND SUSPENSION DECKLIGHT DOWNLIGHT UPLIGHT FLOODLIGHT BULKHEAD SENSOR VISOR EYELID GRILLE FACE LOUVRE TWIN DOUBLE SINGLE HEAD ONLY SOLAR REVERSIBLE'.split(' '));
+// Stock codes name things by mount (ESTERWALL, GELMIEYE) — keep those words for stock matching only.
+const DSTOP_STOCK=new Set('MM CCT LED E27 GU10 GX53 G9 R7S W OPAL CLEAR LIGHT POST LANTERN RESIN ES CW AND THE FOR WITH'.split(' '));
+function dToksStock(s){return String(s).toUpperCase().replace(/[^A-Z0-9 ]/g,' ').split(/\s+/).filter(t=>t&&!DSTOP_STOCK.has(t)&&!/^\d+(\.\d+)?W$/.test(t));}
+const DCOL={BLACK:'BL',GREY:'GY',GY:'GY',WHITE:'WH',BLK:'BL'};
+function dToks(s){return String(s).toUpperCase().replace(/[^A-Z0-9 ]/g,' ').split(/\s+/).filter(t=>t&&!DSTOP.has(t)&&!/^\d+(\.\d+)?W$/.test(t));}
+function dColour(s){const u=String(s).toUpperCase();for(const k in DCOL)if(new RegExp('\\b'+k+'\\b').test(u))return DCOL[k];return '';}
+function dColourName(c){return c==='BL'?'Black':c==='GY'?'Grey':c==='WH'?'White':'';}
+// reqToks: ALL must be present in the candidate. Picks the TIGHTEST match (fewest extra words), tiebreak lowest price.
+function dMatch(list,reqToks,qc,useCode){if(!list||!reqToks.length)return null;
+  const req=new Set(reqToks);let best=null,bestExtra=1e9;
+  for(const r of list){const HAY=((r.d||'')+(useCode?' '+(r.c||''):'')).toUpperCase();
+    if(!reqToks.every(t=>HAY.includes(t)))continue;
+    const rc=dColour(HAY);if(qc&&rc&&qc!==rc)continue;
+    const cand=new Set(dToks(r.d).concat(useCode?dToks(r.c):[]));
+    let extra=0;cand.forEach(t=>{if(!req.has(t)&&!/^(BLACK|GREY|WHITE|BL|GY|WH)$/.test(t))extra++;});
+    if(extra<bestExtra||(extra===bestExtra&&best&&r.p<best.price)){bestExtra=extra;best={price:r.p,desc:(r.c?r.c+' ':'')+r.d};}}
+  return best;}
+function buildDirectFamily(rangeTok,rows){const ECI=state.lists.ECI,MAG=state.lists.MAG,STOCK=state.lists.STOCK;const out=[];
+  for(const r of rows){const reqToks=dToks([r.cfg,r.size].filter(Boolean).join(' ')),qc=dColour([r.cfg,r.finish,r.size].filter(Boolean).join(' '));
+    const e=dMatch(ECI,reqToks,qc,false),m=dMatch(MAG,reqToks,qc,false),s=dMatch(STOCK,reqToks,qc,true);
+    const sups=[e,m].filter(Boolean);const supplier=sups.length?Math.max(...sups.map(x=>x.price)):null;
+    const stock=s?s.price:null;const price=supplier!=null?supplier:(stock!=null?stock:0);
+    const status=(supplier!=null&&stock!=null)?'auto':'review';
+    out.push({code:r.code||text.replace(/[^A-Z0-9]+/gi,'-').replace(/^-|-$/g,'').toUpperCase().slice(0,30),cfg:r.cfg,finish:r.finish||dColourName(qc),lant:r.lant||1,
+      price,stock:stock!=null?stock:0,diff:Math.round((price-(stock!=null?stock:0))*100)/100,status,method:'Direct match',
+      working:`ECI ${e?e.price.toFixed(2):'—'} · MAG ${m?m.price.toFixed(2):'—'} → ${supplier!=null?supplier.toFixed(2):'NO MATCH'}.`,
+      stockWork:s?`Stock: ${s.desc.slice(0,44)} = ${s.price.toFixed(2)}.`:'No stock match.'});}
+  return {_direct:true,rows:out};}
+function renderDirect(fam){
+  document.getElementById('components').innerHTML='<p class="muted">Direct-match range — standalone products (bollards, spikes, wall lights). Each finished item is matched across ECI, Magnalux and Stock; the higher supplier price is kept. No component build-up.</p>';
+  const tb=document.getElementById('tbody');tb.innerHTML='';const onlyRev=document.getElementById('onlyRev').checked;
+  populateColourFilter(fam.rows.map(r=>r.finish));const cv=colourValue();
+  let total=0,auto=0,rev=0;lastRows=fam.rows.slice();
+  fam.rows.forEach(r=>{total++;if(r.status==='review')rev++;else auto++;if(onlyRev&&r.status!=='review')return;
+    if(cv&&String(r.finish||'').trim()!==cv)return;
+    const tr=document.createElement('tr');if(r.status==='review')tr.className='review';const dcls=r.diff<0?'neg':'pos';const dsign=r.diff>0?'+':'';
+    tr.innerHTML=`<td class="code">${r.code}</td><td>${r.cfg}</td><td>${r.finish}</td><td>${r.lant}</td>`+
+      `<td class="price">${r.price.toFixed(2)}</td><td class="num">${r.stock.toFixed(2)}</td><td class="num diff ${dcls}">${dsign}${r.diff.toFixed(2)}</td>`+
+      `<td class="flag">${r.status}</td><td>${r.method}</td><td class="arith">${r.working} ${r.stockWork}</td>`;
+    tb.appendChild(tr);});
+  document.getElementById('c-total').textContent=total;document.getElementById('c-auto').textContent=auto;document.getElementById('c-rev').textContent=rev;}
+
+function renderComponents(fam){const box=document.getElementById('components');box.innerHTML='';
+  for(const name in fam.components){const c=state.comp[name];const div=document.createElement('div');div.className='comp'+(c.flag==='review'?' rev':'');
+    const price=c.price==null?'—':'€'+c.price.toFixed(2);const stk=c.stock==null?'stock —':'stock €'+c.stock.toFixed(2);
+    let opts='';(c.candidates||[]).forEach(cd=>{opts+=`<option value="${cd.price}" ${cd.price===c.price?'selected':''}>${cd.src} · €${cd.price.toFixed(2)} · ${cd.desc}</option>`;});
+    div.innerHTML=`<div class="top"><span class="nm">${name}</span><span><span class="pr">${price}</span> <span class="stk">${stk}</span></span></div>`+
+      (c.candidates&&c.candidates.length>1?`<select data-comp="${name}">${opts}</select>`:
+       (c.candidates&&c.candidates.length===1?`<div class="muted" style="margin-top:5px">${c.candidates[0].src} · ${c.candidates[0].desc}</div>`:
+        `<div class="muted" style="margin-top:5px">No supplier price — floor estimate, confirm with supplier.</div>`));
+    box.appendChild(div);}
+  box.querySelectorAll('select[data-comp]').forEach(sel=>{sel.addEventListener('change',e=>{state.overrides[e.target.dataset.comp]=parseFloat(e.target.value);compute();});});}
+
+let lastRows=[];
+function renderTable(fam,lists){const tb=document.getElementById('tbody');tb.innerHTML='';const onlyRev=document.getElementById('onlyRev').checked;
+  populateColourFilter(fam.configs.map(c=>c[2]));const cv=colourValue();
+  let total=0,auto=0,rev=0;lastRows=[];
+  fam.configs.forEach(([code,cfg,finish,lant,bom,dp,sbom])=>{
+    const r=FumagalliEngine.priceSku(state.comp,bom,lists,dp);
+    if(fam._draft&&r.status!=='review'){r.status='review';}
+    const s=FumagalliEngine.priceStock(state.comp,sbom);
+    const diff=Math.round((r.final-s.price)*100)/100;
+    total++;if(r.status==='review')rev++;else auto++;
+    lastRows.push({code,cfg,finish,lant,price:r.final,stock:s.price,diff,status:r.status,method:r.basis,working:r.cand,stockWork:s.detail});
+    if(onlyRev&&r.status!=='review')return;
+    if(cv&&String(finish||'').trim()!==cv)return;
+    const tr=document.createElement('tr');if(r.status==='review')tr.className='review';
+    const dcls=diff<0?'neg':'pos';const dsign=diff>0?'+':'';
+    tr.innerHTML=`<td class="code">${code}</td><td>${cfg}</td><td>${finish}</td><td>${lant}</td>`+
+      `<td class="price">${r.final.toFixed(2)}</td><td class="num">${s.price.toFixed(2)}</td><td class="num diff ${dcls}">${dsign}${diff.toFixed(2)}</td>`+
+      `<td class="flag">${r.status}</td><td>${r.basis}</td><td class="arith">${r.cand}</td>`;
+    tb.appendChild(tr);});
+  document.getElementById('c-total').textContent=total;document.getElementById('c-auto').textContent=auto;document.getElementById('c-rev').textContent=rev;}
+document.getElementById('onlyRev').addEventListener('change',()=>{if(state.master)compute();});
+document.getElementById('colourFilter').addEventListener('change',()=>{if(state.master)compute();});
+
+/* ---------- add range from an uploaded structure file (beta, auto-drafted) ---------- */
+const QTY=/^(\d+L|\d\+\d|\d+)$/i;
+function tokenize(cfg){return String(cfg).toUpperCase().replace(/[()]/g,' ').replace(/'/g,'').split(/[\/\s]+/).map(t=>t.trim()).filter(t=>t&&t.length>1&&!QTY.test(t));}
+function parseRangeFile(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>{try{
+  const wb=XLSX.read(e.target.result,{type:'array'});const ws=wb.Sheets[wb.SheetNames[0]];const a=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+  const NAMEH=['configuration','short description','description','product','name','item'];
+  let hr=-1,ci=-1;for(let i=0;i<Math.min(a.length,15);i++){const rowL=(a[i]||[]).map(c=>String(c).toLowerCase());
+    for(const h of NAMEH){const idx=rowL.findIndex(x=>x.includes(h));if(idx>=0){hr=i;ci=idx;break;}}if(hr>=0)break;}
+  if(hr<0)return rej(new Error('No Configuration/Description column found.'));
+  const hdr=a[hr].map(c=>String(c||'').toLowerCase());
+  const fi=hdr.findIndex(h=>h.includes('finish')||h.includes('colour')||h.includes('color'));
+  const li=hdr.findIndex(h=>h.includes('lantern'));
+  const si=hdr.findIndex(h=>h.includes('size')||h.includes('height')||h.includes('length'));
+  const pi=hdr.findIndex(h=>h.includes('product code')||h==='code'||h.includes('our code')||h.includes('sku'));
+  const rows=[];
+  for(let i=hr+1;i<a.length;i++){const row=a[i];if(!row||row[ci]==null||String(row[ci]).trim()==='')continue;
+    rows.push({code:pi>=0?row[pi]:null,cfg:String(row[ci]).trim(),finish:fi>=0?String(row[fi]||'').trim():'',size:si>=0?String(row[si]||'').trim():'',lant:li>=0?(parseInt(row[li])||1):1});}
+  res(rows);}catch(err){rej(err);}};r.onerror=rej;r.readAsArrayBuffer(file);});}
+
+function buildDraftFamily(name,rows){
+  // detect head = most frequent token across configs
+  const freq={};rows.forEach(r=>tokenize(r.cfg).forEach(t=>freq[t]=(freq[t]||0)+1));
+  const head=Object.keys(freq).sort((a,b)=>freq[b]-freq[a])[0];
+  const components={};const tokens=new Set();rows.forEach(r=>tokenize(r.cfg).forEach(t=>tokens.add(t)));
+  tokens.forEach(t=>{const key=t.toLowerCase();
+    components[key]=t===head?{lookup:[['ECI',`\\b${t}\\b`,'direct'],['MAG',`\\b${t}\\b`,'direct']],stock:t,pick:'bare'}
+                            :{lookup:[['ECI',`\\b${t}\\b`,'direct'],['MAG',`\\b${t}\\b`,'direct']],stock:t,pick:'bare',forceReview:true};});
+  const configs=[];const seen={};
+  rows.forEach(r=>{const toks=tokenize(r.cfg);
+    const bom=[];toks.forEach(t=>{const k=t.toLowerCase();bom.push([k, t===head?r.lant:1]);});
+    if(!toks.some(t=>t===head))bom.push([head.toLowerCase(),r.lant]);
+    const code=r.code||(r.cfg.replace(/[^A-Z0-9]+/gi,'-')+'-'+(r.finish||'').slice(0,2)).toUpperCase();
+    configs.push([code,r.cfg,r.finish||'',r.lant,bom,[],bom.slice()]);});
+  return {components,configs,_draft:true,_head:head};
+}
+
+const _rangeFileEl=document.getElementById('rangeFile');
+if(_rangeFileEl)_rangeFileEl.addEventListener('change',async e=>{
+  const f=e.target.files[0];if(!f)return;
+  if(!(state.lists.ECI&&state.lists.MAG&&state.lists.STOCK)){alert('Load ECI, Magnalux and Stock first, then add a range.');e.target.value='';return;}
+  try{
+    const rows=await parseRangeFile(f);
+    if(!rows.length)throw new Error('No product rows found.');
+    const freq={};rows.forEach(r=>tokenize(r.cfg).forEach(t=>freq[t]=(freq[t]||0)+1));
+    const head=Object.keys(freq).sort((a,b)=>freq[b]-freq[a])[0];
+    const isHeadFamily=state.lists.ECI.some(r=>new RegExp('^'+head+' LANTERN','i').test(r.d));
+    let fam;
+    if(isHeadFamily){fam=makeLanternHeadFamily(head);}else{fam=buildDirectFamily(head,rows);}
+    state.master=state.master||{};state.master[head]=rows;populateFamilies(head);
+    state.overrides={};compute();
+  }catch(err){alert('Could not draft this range: '+err.message);}
+  e.target.value='';
+});
+
+function colourSuffix(){const cv=colourValue();return cv?'_'+cv.replace(/[^A-Za-z0-9]+/g,'-'):'';}
+document.getElementById('export').addEventListener('click',()=>{const rows=applyColourFilter(lastRows);if(!rows.length)return;
+  const data=rows.map(r=>({'Our Product code':r.code,'Configuration':r.cfg,'Finish':r.finish,'Lanterns':r.lant,'Supplier price (EUR)':r.price,'Stock-based price (EUR)':r.stock,'Diff (supplier - stock)':r.diff,'Status':String(r.status).toUpperCase(),'Method':r.method,'Supplier working':r.working,'Stock working':r.stockWork}));
+  const ws=XLSX.utils.json_to_sheet(data);ws['!cols']=[{wch:24},{wch:22},{wch:7},{wch:6},{wch:14},{wch:16},{wch:14},{wch:9},{wch:14},{wch:70},{wch:55}];
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Priced');
+  if(state.comp&&Object.keys(state.comp).length){
+    const cdata=Object.keys(state.comp).map(n=>({Component:n,'Supplier EUR':state.comp[n].price,'Stock EUR':state.comp[n].stock,Flag:state.comp[n].flag,Basis:state.comp[n].basis,Candidates:state.comp[n].note}));
+    const cws=XLSX.utils.json_to_sheet(cdata);cws['!cols']=[{wch:18},{wch:13},{wch:11},{wch:8},{wch:14},{wch:70}];
+    XLSX.utils.book_append_sheet(wb,cws,'Component build-up');
+  }
+  XLSX.writeFile(wb,'Fumagalli_'+document.getElementById('family').value+colourSuffix()+'_priced.xlsx');});
+
+document.getElementById('exportMin').addEventListener('click',()=>{const rows=applyColourFilter(lastRows);if(!rows.length)return;
+  const data=rows.map(r=>({'Our Product code':r.code,'Configuration':r.cfg,'Finish':r.finish,'Lanterns':r.lant,'Supplier €':r.price,'Stock €':r.stock,'Diff':r.diff,'Status':String(r.status).toUpperCase(),'Method':r.method}));
+  const ws=XLSX.utils.json_to_sheet(data);ws['!cols']=[{wch:26},{wch:24},{wch:8},{wch:7},{wch:11},{wch:11},{wch:9},{wch:9},{wch:13}];
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Prices');
+  XLSX.writeFile(wb,'Fumagalli_'+document.getElementById('family').value+colourSuffix()+'_simple.xlsx');});
+
+/* ---------- export every range in the master, in one workbook ---------- */
+document.getElementById('exportAll').addEventListener('click',()=>{
+  if(!state.master||!Object.keys(state.master).length){alert('Load the master catalogue + ECI, Magnalux and Stock first.');return;}
+  if(!(state.lists.ECI&&state.lists.MAG&&state.lists.STOCK)){alert('Load ECI, Magnalux and Stock first.');return;}
+  const btn=document.getElementById('exportAll');const label=btn.textContent;btn.textContent='Pricing all…';btn.disabled=true;
+  setTimeout(()=>{try{
+    let all=[];Object.keys(state.master).forEach(rn=>{all=all.concat(computeRangeRows(rn));});
+    all=applyColourFilter(all);
+    if(!all.length){alert('No products to export'+(colourValue()?' for colour "'+colourValue()+'"':'')+'.');return;}
+    const data=all.map(r=>({'Range':r.range,'Our Product code':r.code,'Configuration':r.cfg,'Finish':r.finish,'Lanterns':r.lant,'Supplier price (EUR)':r.price,'Stock-based price (EUR)':r.stock,'Diff (supplier - stock)':r.diff,'Status':String(r.status).toUpperCase(),'Method':r.method,'Supplier working':r.working,'Stock working':r.stockWork}));
+    const ws=XLSX.utils.json_to_sheet(data);ws['!cols']=[{wch:16},{wch:24},{wch:22},{wch:8},{wch:7},{wch:14},{wch:16},{wch:14},{wch:9},{wch:14},{wch:70},{wch:55}];
+    const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'All ranges');
+    XLSX.writeFile(wb,'Fumagalli_ALL-ranges'+colourSuffix()+'_priced.xlsx');
+  }catch(err){alert('Could not export all ranges: '+err.message);}
+  finally{btn.textContent=label;btn.disabled=false;}},30);});
+</script>
+</body>
+</html>
