@@ -84,7 +84,7 @@
 <header>
   <span class="dot"></span>
   <h1>Fumagalli Pricer</h1>
-  <span class="sub">component build-up · supplier vs stock · automated with review <b style="font-weight:700;color:var(--ok-ink)">· build 2026-06-23c</b></span>
+  <span class="sub">component build-up · supplier vs stock · automated with review <b style="font-weight:700;color:var(--ok-ink)">· build 2026-06-23d</b></span>
 </header>
 <div class="wrap">
 
@@ -649,6 +649,11 @@ document.getElementById('matchCodes').addEventListener('click',()=>{
       'Supplier Product Code':h?(h.supCode||r.code):'','Price':h?h.price:'','Last Purchased Date':''});}));
   const ws=XLSX.utils.json_to_sheet(rows,{header:['Product Code','Supplier','Supplier Product Code','Price','Last Purchased Date']});
   ws['!cols']=[{wch:24},{wch:10},{wch:24},{wch:12},{wch:18}];
+  // Last Purchased Date = live =TODAY() formula on every row (with today cached so it shows immediately)
+  const today=new Date();
+  const serial=Math.floor((Date.UTC(today.getFullYear(),today.getMonth(),today.getDate())-Date.UTC(1899,11,30))/86400000);
+  const rng=XLSX.utils.decode_range(ws['!ref']);
+  for(let R=1;R<=rng.e.r;R++){ws[XLSX.utils.encode_cell({r:R,c:4})]={t:'n',f:'TODAY()',v:serial,z:'dd/mm/yyyy'};}
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'ProdSuppRecImport');
   XLSX.writeFile(wb,'Product_Supplier_Import_filled.xlsx');
   const n=state.codes.length;
