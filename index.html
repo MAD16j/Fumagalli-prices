@@ -568,18 +568,40 @@ document.getElementById('exportAll').addEventListener('click',()=>{
 /* Always two suppliers, two rows per code: E18 = ECI, M68 = Magnalux. Lookup only, no maths. */
 const SUPPLIERS=[['E18','ECI'],['M68','MAG']];
 function normCode(s){return String(s==null?'':s).toUpperCase().replace(/[^A-Z0-9]/g,'');}
-// Find a price-list row for a code. Description is searched first (codes are often
-// embedded in the description), code column is the backup. Returns {price,supCode,desc} or null.
+// Colour abbreviations → full words used in descriptions.
+const COL_SYNS={BK:['BLACK'],BL:['BLACK'],BLK:['BLACK'],BLACK:['BLACK'],
+  WH:['WHITE'],WHT:['WHITE'],WHITE:['WHITE'],
+  GY:['GREY','GRAY'],GR:['GREY','GRAY'],GRY:['GREY','GRAY'],GRA:['GREY','GRAY'],GREY:['GREY','GRAY'],GRAY:['GREY','GRAY']};
+// Split a code into its colourless base and colour token, e.g. AMELIA400GY → {base:"AMELIA400",colour:"GY"}.
+function splitColour(code){const m=String(code||'').toUpperCase().match(COLRX);
+  return (m&&m[2])?{base:m[1]||'',colour:m[2].toUpperCase()}:{base:String(code||'').toUpperCase(),colour:''};}
+// Break a base into searchable tokens, splitting letter/number runs: "AMELIA400" → ["AMELIA","400"].
+function codeWords(base){return String(base).toUpperCase()
+  .replace(/([A-Z])(\d)/g,'$1 $2').replace(/(\d)([A-Z])/g,'$1 $2').replace(/[^A-Z0-9]+/g,' ')
+  .trim().split(/\s+/).filter(t=>t&&(/^\d+$/.test(t)||t.length>=2));}
+// Token present in haystack with a boundary before it (so "400" hits "400mm" but not "1400").
+function hasTok(hay,tok){return new RegExp('(^|[^A-Z0-9])'+tok.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).test(hay);}
+// Match a code against descriptions by tokens: every name/size token must appear; colour optional.
+function matchByTokens(list,code,requireColour){const {base,colour}=splitColour(code);const words=codeWords(base);
+  if(!words.length)return null;const syns=colour?(COL_SYNS[colour]||[colour]):null;
+  for(const r of list){const hay=String(r.d||'').toUpperCase();
+    if(!words.every(w=>hasTok(hay,w)))continue;
+    if(requireColour&&syns&&!syns.some(s=>hasTok(hay,s)))continue;
+    return {price:r.p,supCode:String(r.c||'').trim(),inherited:false};}
+  return null;}
+// Find a price-list row for a code. Supplier code is matched first (Magnalux uses codes),
+// then the description is matched by tokens so "Amelia400GY" resolves to "Amelia 400mm … Grey".
 function findCodeInList(list,code){if(!list||!list.length)return null;
   const raw=String(code||'').toUpperCase().trim();const nc=normCode(code);if(!nc)return null;
-  const D=r=>String(r.d||'').toUpperCase(),C=r=>String(r.c||'').toUpperCase();
+  const C=r=>String(r.c||'').toUpperCase();
   let hit=
     list.find(r=>r.c&&C(r).trim()===raw)||                       // exact supplier code
-    list.find(r=>r.d&&D(r).includes(raw)&&raw.length>2)||        // raw code inside description
     list.find(r=>r.c&&normCode(r.c)===nc)||                      // normalised supplier code
-    list.find(r=>r.d&&normCode(r.d).includes(nc)&&nc.length>3)|| // normalised code inside description
+    list.find(r=>r.d&&String(r.d).toUpperCase().includes(raw)&&raw.length>2)|| // raw code inside description
     list.find(r=>r.c&&normCode(r.c).includes(nc)&&nc.length>3);  // partial supplier code
-  return hit?{price:hit.p,supCode:String(hit.c||'').trim(),desc:String(hit.d||'').trim()}:null;}
+  if(hit)return {price:hit.p,supCode:String(hit.c||'').trim(),inherited:false};
+  // token match by description (colour-aware first, then colour-agnostic)
+  return matchByTokens(list,code,true)||matchByTokens(list,code,false);}
 // Read product codes from an uploaded file (column "Product Code", else first column).
 function parseCodes(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>{try{
   const wb=XLSX.read(e.target.result,{type:'array'});const ws=wb.Sheets[wb.SheetNames[0]];
