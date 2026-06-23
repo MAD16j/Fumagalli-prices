@@ -108,6 +108,16 @@
     <p class="muted" style="margin-top:10px">Ranges come from the master. Validated head families (ANNA, RUT, SALEM, GOLIA, CEFA) price by component build-up; every other range is matched directly against ECI/Magnalux/Stock by description (code as backup). Anything the suppliers don’t carry is flagged <b>review</b>, never blank.</p>
   </div>
 
+  <div class="panel">
+    <p class="step"><b>3</b> Match codes → supplier import template <span style="font-weight:500;font-size:13px;color:var(--ink-2)">· optional, lookup only</span></p>
+    <p class="muted" style="margin-top:-8px">Upload a list of product codes. Each code is looked up in the two price lists — by description first, code as backup — and written to the import template <b>duplicated per supplier</b>: <b>E18</b> (ECI) and <b>M68</b> (Magnalux), each with the price found. No build-up, no maths — just the prices. Codes with no match are still written (blank price) so nothing is dropped.</p>
+    <div class="row">
+      <label class="drop" style="flex:1;min-width:240px;text-align:left"><div class="lbl">Codes list (.xlsx)</div><div class="file opt" id="codesName">click to choose — uses the “Product Code” column (or column A)</div><input type="file" accept=".xlsx" class="hidden" id="codesFile"></label>
+      <button class="primary" id="matchCodes" disabled>Match codes &amp; export template</button>
+    </div>
+    <p class="muted" id="codesHint" style="margin-top:10px">Load ECI + Magnalux above, then choose a codes file.</p>
+  </div>
+
   <div id="results" class="hidden">
     <div class="chips">
       <span class="chip">Products <b id="c-total">0</b></span>
@@ -225,7 +235,7 @@ const FAMILIES={};
 HEAD_FAMILIES.forEach(([H])=>{FAMILIES[H]=makeLanternHeadFamily(H);});
 
 /* ---------- app ---------- */
-const state={lists:{ECI:null,MAG:null,STOCK:null},master:null,overrides:{},comp:null};
+const state={lists:{ECI:null,MAG:null,STOCK:null},master:null,overrides:{},comp:null,codes:null};
 function populateFamilies(selectName){const sel=document.getElementById('family');sel.innerHTML='';
   const ranges=state.master?Object.keys(state.master):[];
   if(!ranges.length){const o=document.createElement('option');o.textContent='— load master catalogue first —';o.value='';sel.appendChild(o);return;}
@@ -258,7 +268,7 @@ function readXlsx(file,src){return new Promise((res,rej)=>{const r=new FileReade
     }
     res(out);}catch(err){rej(err);}};r.onerror=rej;r.readAsArrayBuffer(file);});}
 
-document.querySelectorAll('input[type=file]').forEach(inp=>{inp.addEventListener('change',async e=>{
+document.querySelectorAll('input[type=file][data-src]').forEach(inp=>{inp.addEventListener('change',async e=>{
   const f=e.target.files[0];if(!f)return;const src=inp.dataset.src;
   if(src==='master'){try{const ranges=await parseMaster(f);state.master=ranges;
     const fe=inp.closest('.drop').querySelector('.file');const n=Object.keys(ranges).length,tot=Object.values(ranges).reduce((s,r)=>s+r.length,0);
@@ -343,7 +353,15 @@ function buildMasterDirect(rangeTok,rows){const ECI=state.lists.ECI,MAG=state.li
 
 function refreshReady(){const ok=l=>Array.isArray(l)&&l.length>0;const ready=ok(state.lists.ECI)&&ok(state.lists.MAG)&&ok(state.lists.STOCK)&&state.master;
   document.getElementById('run').disabled=!ready;
-  document.getElementById('hint').textContent=ready?'Ready — pick a range and click Calculate.':'Load the master + ECI, Magnalux and Stock (each >0 rows) to begin.';}
+  document.getElementById('hint').textContent=ready?'Ready — pick a range and click Calculate.':'Load the master + ECI, Magnalux and Stock (each >0 rows) to begin.';
+  refreshCodesReady();}
+function refreshCodesReady(){const ok=l=>Array.isArray(l)&&l.length>0;
+  const lists=ok(state.lists.ECI)&&ok(state.lists.MAG);const haveCodes=ok(state.codes);
+  const btn=document.getElementById('matchCodes');if(btn)btn.disabled=!(lists&&haveCodes);
+  const hint=document.getElementById('codesHint');if(hint)hint.textContent=
+    !lists?'Load ECI + Magnalux above, then choose a codes file.':
+    !haveCodes?'ECI + Magnalux loaded — now choose a codes file.':
+    state.codes.length+' codes loaded — click to match and export ('+(state.codes.length*2)+' rows: E18 + M68 each).';}
 
 document.getElementById('run').addEventListener('click',()=>{state.overrides={};compute();});
 document.getElementById('family').addEventListener('change',()=>{if(state.lists.ECI&&state.lists.MAG&&state.lists.STOCK&&state.master){state.overrides={};compute();}});
@@ -545,6 +563,63 @@ document.getElementById('exportAll').addEventListener('click',()=>{
     XLSX.writeFile(wb,'Fumagalli_ALL-ranges'+colourSuffix()+'_priced.xlsx');
   }catch(err){alert('Could not export all ranges: '+err.message);}
   finally{btn.textContent=label;btn.disabled=false;}},30);});
+
+/* ---------- match codes against the price lists → supplier import template ---------- */
+/* Always two suppliers, two rows per code: E18 = ECI, M68 = Magnalux. Lookup only, no maths. */
+const SUPPLIERS=[['E18','ECI'],['M68','MAG']];
+function normCode(s){return String(s==null?'':s).toUpperCase().replace(/[^A-Z0-9]/g,'');}
+// Find a price-list row for a code. Description is searched first (codes are often
+// embedded in the description), code column is the backup. Returns {price,supCode,desc} or null.
+function findCodeInList(list,code){if(!list||!list.length)return null;
+  const raw=String(code||'').toUpperCase().trim();const nc=normCode(code);if(!nc)return null;
+  const D=r=>String(r.d||'').toUpperCase(),C=r=>String(r.c||'').toUpperCase();
+  let hit=
+    list.find(r=>r.c&&C(r).trim()===raw)||                       // exact supplier code
+    list.find(r=>r.d&&D(r).includes(raw)&&raw.length>2)||        // raw code inside description
+    list.find(r=>r.c&&normCode(r.c)===nc)||                      // normalised supplier code
+    list.find(r=>r.d&&normCode(r.d).includes(nc)&&nc.length>3)|| // normalised code inside description
+    list.find(r=>r.c&&normCode(r.c).includes(nc)&&nc.length>3);  // partial supplier code
+  return hit?{price:hit.p,supCode:String(hit.c||'').trim(),desc:String(hit.d||'').trim()}:null;}
+// Read product codes from an uploaded file (column "Product Code", else first column).
+function parseCodes(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>{try{
+  const wb=XLSX.read(e.target.result,{type:'array'});const ws=wb.Sheets[wb.SheetNames[0]];
+  const a=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+  let hr=-1,ci=0;
+  for(let i=0;i<Math.min(a.length,12);i++){const row=(a[i]||[]).map(c=>String(c||'').toLowerCase());
+    const idx=row.findIndex(c=>c.includes('product code')||c==='code'||c.includes('our product code')||c==='codes');
+    if(idx>=0){hr=i;ci=idx;break;}}
+  const codes=[];for(let i=(hr>=0?hr+1:0);i<a.length;i++){const row=a[i];if(!row)continue;const v=row[ci];
+    if(v==null)continue;const s=String(v).trim();if(!s||/^product code$/i.test(s))continue;codes.push(s);}
+  res([...new Set(codes)]);}catch(err){rej(err);}};r.onerror=rej;r.readAsArrayBuffer(file);});}
+
+document.getElementById('codesFile').addEventListener('change',async e=>{
+  const f=e.target.files[0];if(!f)return;const drop=e.target.closest('.drop');const fe=drop.querySelector('.file');
+  try{const codes=await parseCodes(f);state.codes=codes;
+    if(!codes.length){drop.classList.remove('has');fe.textContent=f.name+' · ⚠ no product codes found';fe.classList.remove('opt');}
+    else{drop.classList.add('has');fe.textContent=f.name+' · '+codes.length+' codes';fe.classList.remove('opt');}
+  }catch(err){state.codes=null;alert('Could not read codes file: '+err.message);}
+  refreshCodesReady();});
+
+document.getElementById('matchCodes').addEventListener('click',()=>{
+  if(!(state.lists.ECI&&state.lists.MAG)){alert('Load the ECI and Magnalux price lists first.');return;}
+  if(!(state.codes&&state.codes.length)){alert('Choose a codes file first.');return;}
+  const rows=[];const found={E18:0,M68:0};
+  state.codes.forEach(code=>{
+    SUPPLIERS.forEach(([sup,listKey])=>{
+      const hit=findCodeInList(state.lists[listKey],code);
+      if(hit)found[sup]++;
+      rows.push({'Product Code':code,'Supplier':sup,
+        'Supplier Product Code':hit?(hit.supCode||code):'','Price':hit?hit.price:'','Last Purchased Date':''});
+    });
+  });
+  const ws=XLSX.utils.json_to_sheet(rows,{header:['Product Code','Supplier','Supplier Product Code','Price','Last Purchased Date']});
+  ws['!cols']=[{wch:24},{wch:10},{wch:24},{wch:12},{wch:18}];
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'ProdSuppRecImport');
+  XLSX.writeFile(wb,'Product_Supplier_Import_filled.xlsx');
+  const n=state.codes.length;
+  document.getElementById('codesHint').textContent=
+    `Exported ${rows.length} rows for ${n} codes — ECI (E18) matched ${found.E18}/${n}, Magnalux (M68) matched ${found.M68}/${n}. Unmatched rows were written with a blank price.`;
+});
 </script>
 </body>
 </html>

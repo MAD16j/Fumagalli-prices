@@ -29,6 +29,16 @@ single finish, and **Export all ranges** to price every range in the master and
 download them in one workbook (with a `Range` column). The colour filter applies
 to all three export buttons.
 
+### Match codes → supplier import template (step 3)
+
+A separate, lookup-only tool. Load the **ECI** and **Magnalux** price lists, then
+upload a list of **product codes** (a `Product Code` column, or column A). Each
+code is searched in both price lists — by description first, code as backup — and
+written to the supplier import template (`ProdSuppRecImport`) **duplicated per
+supplier**: one row for **E18** (ECI) and one for **M68** (Magnalux), each with
+the price found. No build-up or calculation — just the matched prices. Codes with
+no match are still written with a blank price so nothing is dropped.
+
 Validated head families (ANNA, RUT, SALEM, GOLIA, CEFA) are priced by component
 build-up; every other range is matched directly against the supplier and stock
 lists by description (with product code as a backup).
