@@ -39,6 +39,11 @@ supplier**: one row for **E18** (ECI) and one for **M68** (Magnalux), each with
 the price found. No build-up or calculation — just the matched prices. Codes with
 no match are still written with a blank price so nothing is dropped.
 
+**Colour-fill:** codes are grouped by their colour-stripped base (e.g.
+`AMELIA800BK`, `AMELIA800WH`, `AMELIA800GY` → `AMELIA800`). If one colour is found
+in a price list but a sibling colour is not, the sibling inherits that price — per
+supplier, so a price is only borrowed from the same supplier's matched colour.
+
 Validated head families (ANNA, RUT, SALEM, GOLIA, CEFA) are priced by component
 build-up; every other range is matched directly against the supplier and stock
 lists by description (with product code as a backup).
