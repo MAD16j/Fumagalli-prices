@@ -600,25 +600,38 @@ document.getElementById('codesFile').addEventListener('change',async e=>{
   }catch(err){state.codes=null;alert('Could not read codes file: '+err.message);}
   refreshCodesReady();});
 
+// Strip a trailing colour token so colours of the same product share a base
+// e.g. AMELIA800BK / AMELIA800-WH / ANNA-GY → base "AMELIA800" / "ANNA".
+const COLRX=/^(.*?)[-_ ]?(BK|BL|BLK|WH|WHT|GY|GR|GRY|GRA|BLACK|WHITE|GREY|GRAY)$/i;
+function codeBase(code){const s=String(code||'').trim();const m=s.toUpperCase().match(COLRX);
+  return (m&&m[1]?normCode(m[1]):'')||normCode(s);}
+
 document.getElementById('matchCodes').addEventListener('click',()=>{
   if(!(state.lists.ECI&&state.lists.MAG)){alert('Load the ECI and Magnalux price lists first.');return;}
   if(!(state.codes&&state.codes.length)){alert('Choose a codes file first.');return;}
-  const rows=[];const found={E18:0,M68:0};
-  state.codes.forEach(code=>{
-    SUPPLIERS.forEach(([sup,listKey])=>{
-      const hit=findCodeInList(state.lists[listKey],code);
-      if(hit)found[sup]++;
-      rows.push({'Product Code':code,'Supplier':sup,
-        'Supplier Product Code':hit?(hit.supCode||code):'','Price':hit?hit.price:'','Last Purchased Date':''});
-    });
-  });
+  // 1) direct lookup per code per supplier
+  const recs=state.codes.map(code=>{const r={code,base:codeBase(code)};
+    SUPPLIERS.forEach(([sup,k])=>{const hit=findCodeInList(state.lists[k],code);
+      r[sup]=hit?{price:hit.price,supCode:hit.supCode,inherited:false}:null;});
+    return r;});
+  // 2) colour-fill: within the same base, an unmatched colour inherits a priced sibling (per supplier)
+  const found={E18:0,M68:0},filled={E18:0,M68:0};
+  const groups={};recs.forEach(r=>{(groups[r.base]=groups[r.base]||[]).push(r);});
+  SUPPLIERS.forEach(([sup])=>{recs.forEach(r=>{if(r[sup])found[sup]++;});
+    for(const b in groups){const g=groups[b];const donor=g.find(r=>r[sup]);if(!donor)continue;
+      g.forEach(r=>{if(!r[sup]){r[sup]={price:donor[sup].price,supCode:'',inherited:true,from:donor.code};filled[sup]++;}});}});
+  // 3) build the template rows
+  const rows=[];
+  recs.forEach(r=>SUPPLIERS.forEach(([sup])=>{const h=r[sup];
+    rows.push({'Product Code':r.code,'Supplier':sup,
+      'Supplier Product Code':h?(h.supCode||r.code):'','Price':h?h.price:'','Last Purchased Date':''});}));
   const ws=XLSX.utils.json_to_sheet(rows,{header:['Product Code','Supplier','Supplier Product Code','Price','Last Purchased Date']});
   ws['!cols']=[{wch:24},{wch:10},{wch:24},{wch:12},{wch:18}];
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'ProdSuppRecImport');
   XLSX.writeFile(wb,'Product_Supplier_Import_filled.xlsx');
   const n=state.codes.length;
   document.getElementById('codesHint').textContent=
-    `Exported ${rows.length} rows for ${n} codes — ECI (E18) matched ${found.E18}/${n}, Magnalux (M68) matched ${found.M68}/${n}. Unmatched rows were written with a blank price.`;
+    `Exported ${rows.length} rows for ${n} codes — ECI (E18): ${found.E18} matched + ${filled.E18} colour-filled; Magnalux (M68): ${found.M68} matched + ${filled.M68} colour-filled. Any still-blank price had no priced sibling.`;
 });
 </script>
 </body>
