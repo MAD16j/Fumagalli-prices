@@ -89,7 +89,7 @@
 <header>
   <span class="dot"></span>
   <h1>Fumagalli Pricer</h1>
-  <span class="sub">component build-up · supplier vs stock · automated with review <b style="font-weight:700;color:var(--ok-ink)">· build 2026-06-23g</b></span>
+  <span class="sub">component build-up · supplier vs stock · automated with review <b style="font-weight:700;color:var(--ok-ink)">· build 2026-06-23h</b></span>
 </header>
 <div class="wrap">
 
@@ -356,9 +356,9 @@ function buildMasterDirect(rangeTok,rows){const ECI=state.lists.ECI,MAG=state.li
   }
   return {_direct:true,rows:out};}
 
-function refreshReady(){const ok=l=>Array.isArray(l)&&l.length>0;const ready=ok(state.lists.ECI)&&ok(state.lists.MAG)&&ok(state.lists.STOCK)&&state.master;
+function refreshReady(){const ok=l=>Array.isArray(l)&&l.length>0;const ready=ok(state.lists.ECI)&&ok(state.lists.MAG)&&state.master;
   document.getElementById('run').disabled=!ready;
-  document.getElementById('hint').textContent=ready?'Ready — pick a range and click Calculate.':'Load the master + ECI, Magnalux and Stock (each >0 rows) to begin.';
+  document.getElementById('hint').textContent=ready?'Ready — pick a range and click Calculate.'+(ok(state.lists.STOCK)?'':' (Stock list optional.)'):'Load the master + ECI and Magnalux to begin (Stock list optional).';
   refreshCodesReady();}
 function refreshCodesReady(){const ok=l=>Array.isArray(l)&&l.length>0;
   const lists=ok(state.lists.ECI)&&ok(state.lists.MAG);const haveCodes=ok(state.codes);
@@ -369,7 +369,7 @@ function refreshCodesReady(){const ok=l=>Array.isArray(l)&&l.length>0;
     state.codes.length+' codes loaded — click to match and export ('+(state.codes.length*2)+' rows: E18 + M68 each).';}
 
 document.getElementById('run').addEventListener('click',()=>{state.overrides={};compute();});
-document.getElementById('family').addEventListener('change',()=>{if(state.lists.ECI&&state.lists.MAG&&state.lists.STOCK&&state.master){state.overrides={};compute();}});
+document.getElementById('family').addEventListener('change',()=>{if(state.lists.ECI&&state.lists.MAG&&state.master){state.overrides={};compute();}});
 function compute(){const rangeName=document.getElementById('family').value;
   if(!rangeName||!state.master||!state.master[rangeName]){return;}
   const rows=state.master[rangeName];const tok=rangeToken(rows);
